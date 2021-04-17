@@ -1,0 +1,56 @@
+image: ruby:2.6.3
+
+stages:
+  - test
+  - deploy
+
+cache:
+  key: $CI_COMMIT_REF_SLUG
+  paths:
+    - vendor/bundle
+
+before_script:
+  - gem install bundler
+  - bundle install --deployment --without development -j $(nproc)
+
+rspec:
+  stage: test
+  services:
+    - postgres
+  variables:
+    POSTGRES_DB: test
+    POSTGRES_USER: test
+    POSTGRES_PASSWORD: test
+    DATABASE_URL: "postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres/$POSTGRES_DB"
+    DATABASE_CLEANER_ALLOW_REMOTE_DATABASE_URL: 'true'
+  script:
+    # Use example environment variables
+    - cp config/application.yml.example config/application.yml
+    - apt-get update -qy && apt-get install -y nodejs
+    - bundle exec rails db:migrate RAILS_ENV=test
+    - bundle exec rspec
+  coverage: '/\(\d+.\d+\%\) covered/'
+  only:
+    - merge_requests
+
+rubocop:
+  stage: test
+  script:
+    - bundle exec rubocop
+  only:
+    - merge_requests
+
+deploy_staging:
+  stage: deploy
+  before_script:
+    # Require environment variables
+    - '[ -z "$HEROKU_STAGING_APP_NAME" ] && exit 1'
+    - '[ -z "$HEROKU_API_KEY" ] && exit 1'
+  script:
+    - gem install dpl
+    - dpl --provider=heroku --app=$HEROKU_STAGING_APP_NAME --api-key=$HEROKU_API_KEY
+  environment:
+    name: staging
+    url: https://$HEROKU_STAGING_APP_NAME.herokuapp.com/
+  only:
+    - master

@@ -1,0 +1,5 @@
+class AddExpirationToAuthTokens < ActiveRecord::Migration[5.2]
+  def change
+    add_column :authentication_tokens, :expires_in, :integer
+  end
+end
